@@ -218,3 +218,21 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---- DS340W project ----
+# datasets and checkpoints (large files)
+data/
+*.pth
+*.pt
+
+# training / evaluation outputs; results csv and png are kept
+output*/**
+!output*/
+!output*/**/
+!output*/**/*.csv
+!output*/**/*.png
+output*/**/cache_*.npz
+output*/**/*.log
+
+# CIFAR-10 split arrays written by export_cifar10_splits.py
+split_data/

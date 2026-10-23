@@ -131,9 +131,11 @@ def get_loader(data, data_path, batch_size, args):
     test_onehot = one_hot_encoding(test_set.targets)
     test_label = test_set.targets
 
-    train_loader = DataLoader(train_data,batch_size=batch_size,shuffle=True,num_workers=4)
-    valid_loader = DataLoader(eval_data, batch_size=batch_size, shuffle=False, num_workers=4)
-    test_loader = DataLoader(test_data,batch_size=batch_size,shuffle=False,num_workers=4)
+    # args.num_workers is optional; main_base/main_fmfp don't define it and keep the original 4
+    num_workers = getattr(args, 'num_workers', 4)
+    train_loader = DataLoader(train_data,batch_size=batch_size,shuffle=True,num_workers=num_workers)
+    valid_loader = DataLoader(eval_data, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    test_loader = DataLoader(test_data,batch_size=batch_size,shuffle=False,num_workers=num_workers)
 
     print("-------------------Make loader-------------------")
     print('Train Dataset :',len(train_loader.dataset), 'Valid Dataset :',len(valid_loader.dataset),

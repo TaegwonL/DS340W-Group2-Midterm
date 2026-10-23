@@ -15,11 +15,12 @@ import csv
 import math
 import pandas as pd
 import numpy as np
-import resource
+try:
+    import resource
+except ImportError:
+    resource = None
 from collections import OrderedDict
 
-from model import LeNet
-from model import AlexNet
 from model import resnet
 from model import resnet18
 from model import densenet_BC
@@ -32,11 +33,11 @@ from utils import data as dataset
 from utils import crl_utils
 from utils import metrics
 from utils import utils
-import train_base
+import train_fmfp
 
-rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (2048, rlimit[1]))
-
+from torch.optim.swa_utils import AveragedModel, SWALR
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from utils.sam import SAM
 
 def csv_writter(path, dic, start):
     if os.path.isdir(path) == False: os.makedirs(path)
@@ -65,11 +66,10 @@ parser.add_argument('--plot', default=20, type=int, help='')
 parser.add_argument('--run', default=3, type=int, help='')
 parser.add_argument('--classnumber', default=10, type=int, help='class number for the dataset')
 parser.add_argument('--data', default='cifar10', type=str, help='Dataset name to use [cifar10, cifar100]')
-parser.add_argument('--model', default='res110', type=str, help='Models name to use [res110, dense, wrn, cmixer, efficientnet, mobilenet, vgg]')
-parser.add_argument('--method', default='Baseline', type=str, help='[Baseline, Mixup, LS, L1, focal, CRL]')
+parser.add_argument('--model', default='resnet18', type=str, help='Models name to use [res110, dense, wrn, cmixer, efficientnet, mobilenet, vgg]')
+parser.add_argument('--method', default='fmfp', type=str, help='[sam, swa, fmfp]')
 parser.add_argument('--data_path', default='./data/', type=str, help='Dataset directory')
-parser.add_argument('--cwd_weight', default=0.1, type=float, help='Trianing time tempscaling')
-parser.add_argument('--save_path', default='./output/', type=str, help='Savefiles directory')
+parser.add_argument('--save_path', default='./output_flat/', type=str, help='Savefiles directory')
 parser.add_argument('--rank_weight', default=1.0, type=float, help='Rank loss weight')
 parser.add_argument('--gpu', default='0', type=str, help='GPU id to use')
 parser.add_argument('--print-freq', '-p', default=200, type=int, metavar='N', help='print frequency (default: 10)')
@@ -77,17 +77,17 @@ parser.add_argument('--print-freq', '-p', default=200, type=int, metavar='N', he
 args = parser.parse_args()
 
 def main():
-    acc_list=[]
-    auroc_list=[]
-    aupr_success_list=[]
-    aupr_list=[]
-    fpr_list=[]
+    acc_list = []
+    auroc_list = []
+    aupr_success_list = []
+    aupr_list = []
+    fpr_list = []
     tnr_list = []
-    aurc_list=[]
-    eaurc_list=[]
-    ece_list=[]
-    nll_list=[]
-    brier_list=[]
+    aurc_list = []
+    eaurc_list = []
+    ece_list = []
+    nll_list = []
+    brier_list = []
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     cudnn.benchmark = True
 
@@ -100,14 +100,13 @@ def main():
 
     if args.data == 'cifar100':
         num_class = 100
-        args.classnumber = 100
     else:
         num_class = 10
     model_dict = {
         "num_classes": num_class,
     }
     for r in range(args.run):
-        print(100*'#')
+        print(100 * '#')
         print(r)
         if args.model == 'resnet18':
             model = resnet18.ResNet18(**model_dict).cuda()
@@ -127,25 +126,9 @@ def main():
             model = mobilenet.mobilenet(**model_dict).cuda()
         elif args.model == "cmixer":
             model = convmixer.ConvMixer(256, 16, kernel_size=8, patch_size=1, n_classes=num_class).cuda()
-        elif args.model == 'LeNet':
-            model = LeNet.LeNet().cuda()
-        elif args.model == 'AlexNet':
-            model = AlexNet.AlexNet().cuda()
+
 
         cls_criterion = nn.CrossEntropyLoss().cuda()
-
-        base_lr = 0.1  # Initial learning rate
-        lr_strat = [80, 130, 170]
-        lr_factor = 0.1  # Learning rate decrease factor
-        custom_weight_decay = 5e-4  # Weight Decay
-        custom_momentum = 0.9  # Momentum
-        optimizer = torch.optim.SGD(model.parameters(), lr=base_lr, momentum=custom_momentum,
-                                    weight_decay=custom_weight_decay)
-        scheduler = MultiStepLR(optimizer, milestones=lr_strat, gamma=lr_factor)
-        if args.model == "convmixer":
-            optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-            scheduler = None
-
         # make logger
         train_logger = utils.Logger(os.path.join(save_path, 'train.log'))
         result_logger = utils.Logger(os.path.join(save_path, 'result.log'))
@@ -153,11 +136,55 @@ def main():
         correctness_history = crl_utils.History(len(train_loader.dataset))
         ranking_criterion = nn.MarginRankingLoss(margin=0.0).cuda()
 
+        base_lr = 0.1  # Initial learning rate
+        lr_strat = [80, 130, 170]
+        lr_factor = 0.1  # Learning rate decrease factor
+        custom_weight_decay = 5e-4  # Weight Decay
+        custom_momentum = 0.9  # Momentum
+
+        if args.method == 'sam':
+            if args.model == "convmixer":
+                base_optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=custom_weight_decay)
+                optimizer = SAM(model.parameters(), base_optimizer)
+                scheduler = None
+            else:
+                base_optimizer = torch.optim.SGD
+                optimizer = SAM(model.parameters(), base_optimizer, lr=base_lr, momentum=custom_momentum,
+                                weight_decay=custom_weight_decay)
+                scheduler = MultiStepLR(optimizer, milestones=lr_strat, gamma=lr_factor)
+
+        elif args.method == 'swa':
+            optimizer = torch.optim.SGD(model.parameters(), lr=base_lr, momentum=custom_momentum,
+                                        weight_decay=custom_weight_decay)
+            if args.model == "convmixer":
+                optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=custom_weight_decay)
+            swa_model = AveragedModel(model)
+            scheduler = CosineAnnealingLR(optimizer, T_max=100)
+            swa_start = 120
+            swa_scheduler = SWALR(optimizer, swa_lr=0.05)
+        elif args.method == 'fmfp':
+            if args.model == "convmixer":
+                base_optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=custom_weight_decay)
+                optimizer = SAM(model.parameters(), base_optimizer)
+            else:
+                base_optimizer = torch.optim.SGD
+                optimizer = SAM(model.parameters(), base_optimizer, lr=base_lr, momentum=custom_momentum,
+                                weight_decay=custom_weight_decay)
+            swa_model = AveragedModel(model)
+            scheduler = CosineAnnealingLR(optimizer, T_max=100)
+            swa_start = 120
+            swa_scheduler = SWALR(optimizer, swa_lr=0.05)
+
+        # make logger
+        train_logger = utils.Logger(os.path.join(save_path, 'train.log'))
+        result_logger = utils.Logger(os.path.join(save_path, 'result.log'))
+
+        correctness_history = crl_utils.History(len(train_loader.dataset))
+
+
         # start Train
         for epoch in range(1, args.epochs + 1):
-            if scheduler != None:
-                scheduler.step()
-            train_base.train(train_loader,
+            train_fmfp.train(train_loader,
                         model,
                         cls_criterion,
                         ranking_criterion,
@@ -166,6 +193,16 @@ def main():
                         correctness_history,
                         train_logger,
                         args)
+            if args.method == 'swa' or args.method == 'fmfp':
+                if scheduler != None:
+                    if epoch > swa_start:
+                        swa_model.update_parameters(model)
+                        swa_scheduler.step()
+                    else:
+                        scheduler.step()
+            else:
+                if scheduler != None:
+                    scheduler.step()
 
             # save model
             if epoch == args.epochs:
@@ -174,19 +211,19 @@ def main():
             # finish train
 
             # calc measure
-            if epoch % args.plot == 0:
-                print(100*'#')
+            if epoch % 20 == 0:
+                print(100 * '#')
                 print(epoch)
-                acc, auroc, aupr_success, aupr, fpr, tnr, aurc, eaurc, ece, nll, brier = metrics.calc_metrics(args, test_loader,
-                                                                                    test_label,
-                                                                                    test_onehot,
-                                                                                    model,
-                                                                                    cls_criterion)
-        acc, auroc, aupr_success, aupr, fpr, tnr, aurc, eaurc, ece, nll, brier = metrics.calc_metrics(args, test_loader,
-                                                                                                 test_label,
-                                                                                                 test_onehot,
-                                                                                                 model,
-                                                                                                 cls_criterion)
+                acc, auroc, aupr_success, aupr, fpr, tnr, aurc, eaurc, ece, nll, brier = metrics.calc_metrics(args, test_loader, test_label, test_onehot,
+                                                                                                              model, cls_criterion)
+        # Update bn statistics for the swa_model at the end
+        if args.method == 'swa' or args.method == 'fmfp':
+            torch.optim.swa_utils.update_bn(train_loader, swa_model.cpu())
+            model = swa_model.cuda()
+        torch.save(model.state_dict(),
+                   os.path.join(save_path, 'model.pth'))
+        acc, auroc, aupr_success, aupr, fpr, tnr, aurc, eaurc, ece, nll, brier = metrics.calc_metrics(args, test_loader, test_label, test_onehot,
+                                                                                                      model, cls_criterion)
         # result write
         result_logger.write([acc, auroc, aupr_success, aupr, fpr, tnr, aurc, eaurc, ece, nll, brier])
 
@@ -202,7 +239,6 @@ def main():
         nll_list.append(nll)
         brier_list.append(brier)
 
-
     acc_mean = np.mean(acc_list)
     auroc_mean = np.mean(auroc_list)
     aupr_success_mean = np.mean(aupr_success_list)
@@ -215,17 +251,17 @@ def main():
     nll_mean = np.mean(nll_list)
     brier_mean = np.mean(brier_list)
 
-    acc_std = np.std(acc_list,ddof=1)
-    auroc_std = np.std(auroc_list,ddof=1)
-    aupr_success_std = np.std(aupr_success_list,ddof=1)
-    aupr_std = np.std(aupr_list,ddof=1)
-    fpr_std = np.std(fpr_list,ddof=1)
-    tnr_std = np.std(tnr_list,ddof=1)
-    aurc_std = np.std(aurc_list,ddof=1)
-    eaurc_std = np.std(eaurc_list,ddof=1)
-    ece_std = np.std(ece_list,ddof=1)
-    nll_std = np.std(nll_list,ddof=1)
-    brier_std = np.std(brier_list,ddof=1)
+    acc_std = np.std(acc_list, ddof=1)
+    auroc_std = np.std(auroc_list, ddof=1)
+    aupr_success_std = np.std(aupr_success_list, ddof=1)
+    aupr_std = np.std(aupr_list, ddof=1)
+    fpr_std = np.std(fpr_list, ddof=1)
+    tnr_std = np.std(tnr_list, ddof=1)
+    aurc_std = np.std(aurc_list, ddof=1)
+    eaurc_std = np.std(eaurc_list, ddof=1)
+    ece_std = np.std(ece_list, ddof=1)
+    nll_std = np.std(nll_list, ddof=1)
+    brier_std = np.std(brier_list, ddof=1)
 
     logs_dict = OrderedDict(Counter(
         {
@@ -340,6 +376,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 

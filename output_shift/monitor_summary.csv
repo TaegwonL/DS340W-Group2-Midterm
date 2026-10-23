@@ -1,0 +1,11 @@
+tag,signal,spearman,spearman_p,trigger_auroc,n_groups,n_trigger
+baseline,1-msp,0.9767,3.41e-51,100.0,76,57
+baseline,p_err,0.9771,1.71e-51,100.0,76,57
+baseline,total_risk,0.9873,7.33e-61,100.0,76,57
+baseline,epistemic,0.9667,1.51e-45,99.8153,76,57
+baseline,aleatoric,0.9924,4.34e-69,100.0,76,57
+fmfp,1-msp,0.9862,1.52e-59,99.9107,76,56
+fmfp,p_err,0.9852,1.79e-58,100.0,76,56
+fmfp,total_risk,0.9864,8.46e-60,99.9107,76,56
+fmfp,epistemic,0.932,2.4e-34,99.2857,76,56
+fmfp,aleatoric,0.9861,2.19e-59,99.7321,76,56
