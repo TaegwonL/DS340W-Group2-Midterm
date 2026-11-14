@@ -1,0 +1,7 @@
+method,signal,baseline_mae_pp,baseline_ba_tau2,baseline_ba_tau4,fmfp_mae_pp,fmfp_ba_tau2,fmfp_ba_tau4
+ratio,1-msp,7.9,100.0,88.2,8.4,98.2,79.2
+ratio,p_err,10.4,97.4,80.3,7.4,99.1,83.3
+lin_loco,1-msp,6.4,91.7,93.2,5.3,97.4,93.6
+iso_loco,1-msp,5.7,100.0,94.7,4.7,96.5,90.7
+iso_loco,p_err,5.9,97.2,97.3,4.9,96.5,94.7
+multi_loco,all,4.8,90.8,90.5,3.5,87.6,94.9
