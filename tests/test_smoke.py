@@ -16,9 +16,11 @@ sys.path.insert(0, ROOT)
 
 import cifar10c  # noqa: E402
 import eval_shift  # noqa: E402
+import label_free_trigger  # noqa: E402
 import monitor  # noqa: E402
 import plot_monitor  # noqa: E402
 import plot_shift  # noqa: E402
+import plot_trigger  # noqa: E402
 from fp_metrics import evaluate, msp  # noqa: E402
 from risk_advisor import RiskAdvisor  # noqa: E402
 
@@ -161,6 +163,40 @@ def test_eval_shift_from_cache_and_plots():
         assert os.path.exists(os.path.join(d, 'auroc_vs_severity_fog.png'))
         run_main(plot_monitor, ['--dir', d])
         assert os.path.getsize(os.path.join(d, 'monitor_signals.png')) > 10000
+        import matplotlib.pyplot as plt
+        plt.close('all')
+
+
+def test_label_free_trigger():
+    rng = np.random.default_rng(3)
+    with tempfile.TemporaryDirectory() as d:
+        for tag in ['baseline', 'fmfp']:
+            rows = [{'tag': tag, 'corruption': 'clean', 'severity': 0, 'n': 1000, 'error_rate': 0.05}]
+            for name in ['noise', 'blur', 'fog', 'snow']:
+                for s in range(1, 6):
+                    rows.append({'tag': tag, 'corruption': name, 'severity': s, 'n': 1000,
+                                 'error_rate': min(0.9, 0.05 * (1 + s * rng.uniform(0.5, 2.0)))})
+            for r in rows:
+                for j, sig in enumerate(monitor.SIGNALS):
+                    # signals grow with error but more slowly, like 1 - MSP does
+                    r[sig] = 0.02 + 0.5 * r['error_rate'] ** 1.3 + 0.001 * j
+                r['erel'] = r['error_rate'] / 0.05
+                r['trigger'] = int(r['erel'] > 2)
+            with open(os.path.join(d, 'monitor_{}.csv'.format(tag)), 'w', newline='') as f:
+                w = csv.DictWriter(f, fieldnames=list(rows[0]))
+                w.writeheader()
+                w.writerows(rows)
+        run_main(label_free_trigger, ['--dir', d])
+        summary = read_csv(os.path.join(d, 'trigger_summary.csv'))
+        methods = {r['method'] for r in summary}
+        assert methods == {'ratio', 'iso_loco', 'lin_loco', 'multi_loco'}
+        for r in summary:
+            assert 0 <= float(r['false_alarm']) <= 100 and 0 <= float(r['miss']) <= 100
+        groups = read_csv(os.path.join(d, 'trigger_groups.csv'))
+        assert len(groups) == 2 * 20 and 'iso_loco:1-msp' in groups[0]
+        assert len(read_csv(os.path.join(d, 'trigger_table.csv'))) == len(label_free_trigger.PAPER_ROWS)
+        run_main(plot_trigger, ['--dir', d])
+        assert os.path.getsize(os.path.join(d, 'trigger_pred_vs_true.png')) > 10000
         import matplotlib.pyplot as plt
         plt.close('all')
 

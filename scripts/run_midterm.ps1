@@ -122,6 +122,12 @@ if (-not $SkipPlot) {
     Invoke-Step "3b. plot_monitor" @("plot_monitor.py")
 }
 
+# novel approach: label-free retraining trigger (CPU only, reads monitor_{tag}.csv)
+if (-not $SkipPlot) {
+    Invoke-Step "4a. label_free_trigger" @("label_free_trigger.py")
+    Invoke-Step "4b. plot_trigger" @("plot_trigger.py")
+}
+
 Write-Log ""
 Write-Log ("RUN END   : {0}" -f (Get-Date).ToString($TimeFmt))
 Write-Log ("TOTAL     : {0:hh\:mm\:ss}" -f ((Get-Date) - $runStart))

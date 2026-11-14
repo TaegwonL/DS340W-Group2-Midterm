@@ -263,6 +263,60 @@ Noise corruptions are the hardest for both models (severity-5 AUROC 60–71).
 * The `logits+emb` Risk Advisor ablation, and more diverse ensemble members.
 * More than one training run per method.
 
+### Novel approach: a label-free retraining trigger
+
+Midterm finding 3 showed that label-free signals correlate with the error rate, but
+correlation is not a decision rule, and `Erel > 2` was too easy to test. For the
+novel-approach milestone we replaced the monitoring block with
+`label_free_trigger.py`, which has to make an actual fire / no-fire call for each
+shifted group without using that group's labels, and we score it at stricter
+thresholds (`Erel > 2, 3, 4`).
+
+Techniques compared (each sees only the group's average signal):
+
+| Name | What it does |
+|---|---|
+| `ratio` | Srel = signal / clean signal; fire when Srel > tau. No fitting. |
+| `lin_loco` | Straight line from signal to error rate, fit leave-one-corruption-out. |
+| `iso_loco` | Isotonic (monotone) curve from signal to error rate, leave-one-corruption-out. |
+| `multi_loco` | Ridge regression on all five signals, leave-one-corruption-out. |
+
+Leave-one-corruption-out (LOCO): to score the 5 groups of one corruption type, the
+mapping is fit on the other 14 types plus the clean group, so the model never sees
+labels from the shift it is judged on. Predicted Erel = predicted error / clean error.
+
+```
+python label_free_trigger.py     # writes trigger_summary.csv, trigger_groups.csv, trigger_table.csv
+python plot_trigger.py           # writes trigger_pred_vs_true.png
+python plot_trigger.py --tags fmfp --out output_shift/trigger_pred_vs_true_fmfp.png
+```
+
+Both scripts only read `output_shift/monitor_{tag}.csv`, so they run in seconds on a
+CPU and do not need the checkpoints or CIFAR-10-C.
+
+**Results** (75 shifted groups per model; BA = balanced accuracy of the trigger, %;
+MAE = mean absolute error of the predicted error rate, percentage points):
+
+| Technique | Signal | Baseline MAE | Baseline BA, tau 2 | Baseline BA, tau 4 | FMFP MAE | FMFP BA, tau 2 | FMFP BA, tau 4 |
+|---|---|---|---|---|---|---|---|
+| Ratio rule | 1 - MSP | 7.9 | 100.0 | 88.2 | 8.4 | 98.2 | 79.2 |
+| Ratio rule | p_err | 10.4 | 97.4 | 80.3 | 7.4 | 99.1 | 83.3 |
+| Linear LOCO | 1 - MSP | 6.4 | 91.7 | 93.2 | 5.3 | 97.4 | 93.6 |
+| Isotonic LOCO | 1 - MSP | 5.7 | 100.0 | 94.7 | 4.7 | 96.5 | 90.7 |
+| Isotonic LOCO | p_err | 5.9 | 97.2 | **97.3** | 4.9 | 96.5 | 94.7 |
+| Ridge LOCO | all five | **4.8** | 90.8 | 90.5 | **3.5** | 87.6 | **94.9** |
+
+![Predicted vs true Erel](output_shift/trigger_pred_vs_true.png)
+
+* The ratio rule never raises a false alarm, but confidence grows more slowly than
+  error, so at `tau = 4` it misses 24% (Baseline) and 42% (FMFP) of degraded groups.
+* A fitted isotonic curve keeps balanced accuracy at 90.7 to 100 across all three
+  thresholds; a straight line never misses but raises up to 17% false alarms.
+* Using all five signals gives the most accurate error estimate but not better
+  yes/no calls. Risk Advisor `p_err` behaves almost like `1 - MSP`.
+* Caveats: 75 groups per model, one training run each, and LOCO assumes we have
+  labeled data for some other shift types.
+
 ---
 
 ## Original work and attribution
