@@ -1,8 +1,11 @@
-torch
-torchvision
-numpy
-scipy
-scikit-learn
-pandas
-Pillow
-matplotlib
+# Versions used to produce the results in the paper. The Risk Advisor
+# (scikit-learn gradient boosting) gives slightly different numbers with other
+# scikit-learn versions, so keep these pinned to reproduce the paper exactly.
+# torch / torchvision are installed separately (see README): CPU build for the
+# quick start, CUDA build for training.
+numpy==2.2.6
+scipy==1.15.3
+scikit-learn==1.7.2
+pandas==2.3.3
+matplotlib==3.10.9
+Pillow==12.3.0
