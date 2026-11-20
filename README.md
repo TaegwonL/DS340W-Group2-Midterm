@@ -15,7 +15,8 @@ validation split, the clean test set and all 75 CIFAR-10-C groups) as the
 [v1.0 release](https://github.com/TaegwonL/DS340W-Group2-Midterm/releases/tag/v1.0).
 From the caches, the Risk Advisor, all metrics, the monitoring signals and the
 label-free trigger are recomputed on a CPU in a few minutes and reproduce every
-number in the paper. Needs Python 3.10+ and about 2 GB of disk.
+number in the paper. Needs Python 3.10–3.13 and about 2 GB of disk; keep the pinned
+versions in `requirements.txt` (a newer scikit-learn changes the Risk Advisor numbers).
 
 ```
 git clone https://github.com/TaegwonL/DS340W-Group2-Midterm.git
@@ -80,7 +81,8 @@ Training logic and hyperparameters in `main_base.py`, `main_fmfp.py` and
 * `tests/test_smoke.py` — GPU-free smoke tests.
 * `export_cifar10_splits.py` — writes the 45,000 / 5,000 / 10,000 train / validation /
   test split used by `utils/data.py` (NumPy seed 42) to `split_data/` (not committed).
-* `requirements.txt` — Python dependencies (unpinned).
+* `requirements.txt` — Python dependencies, pinned to the versions that produced the paper's numbers
+  (other scikit-learn versions change the Risk Advisor results slightly).
 * `download_release.py` — fetches the inference caches (and, with `--models`, the
   checkpoints) from the v1.0 release.
 * `check_reproduction.py` — compares a fresh run with the committed results and prints
