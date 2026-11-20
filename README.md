@@ -6,6 +6,46 @@ CIFAR-10-C (corruption severity 0 → 5), and measure how well the model and a
 post-hoc meta-model can tell **which predictions are wrong** and **when the
 deployed model as a whole should be retrained**, without labels.
 
+### Quick start: reproduce the paper's results (no GPU, no training)
+
+Training the two models takes 2 × 201 epochs on a GPU and the shift evaluation
+needs CIFAR-10-C (2.9 GB). We did both once and published the trained checkpoints
+and the inference caches (logits, embeddings and correctness of both models on the
+validation split, the clean test set and all 75 CIFAR-10-C groups) as the
+[v1.0 release](https://github.com/TaegwonL/DS340W-Group2-Midterm/releases/tag/v1.0).
+From the caches, the Risk Advisor, all metrics, the monitoring signals and the
+label-free trigger are recomputed on a CPU in a few minutes and reproduce every
+number in the paper. Needs Python 3.10+ and about 2 GB of disk.
+
+```
+git clone https://github.com/TaegwonL/DS340W-Group2-Midterm.git
+cd DS340W-Group2-Midterm
+python -m venv .venv
+.venv\Scripts\activate             # macOS / Linux: source .venv/bin/activate
+pip install torch torchvision
+pip install -r requirements.txt
+
+python download_release.py         # 2 caches (2 x 880 MB) -> demo_output/
+
+python eval_shift.py --tag baseline --use_cache --out demo_output/results.csv
+python eval_shift.py --tag fmfp --use_cache --out demo_output/results.csv
+python label_free_trigger.py --dir demo_output
+python plot_shift.py --csv demo_output/results.csv
+python plot_monitor.py --dir demo_output
+python plot_trigger.py --dir demo_output
+
+python check_reproduction.py       # compares demo_output/ with output_shift/ and prints Tables II and III
+```
+
+`check_reproduction.py` reports `MATCH` for each results file and prints the paper's
+Table III (pooled AUROC by severity), Table II (label-free trigger) and the Spearman
+correlations of Section IV.C. Everything is written to `demo_output/`, so the
+committed results in `output_shift/` stay untouched for the comparison.
+`python download_release.py --models` also fetches the two checkpoints
+(`baseline_model.pth`, `fmfp_model.pth`) to `checkpoints/`; with a GPU and CIFAR-10-C
+they rerun the inference itself (`eval_shift.py --ckpt checkpoints/fmfp_model.pth --tag fmfp`,
+see *Running* below).
+
 ### Research question
 
 As the input distribution shifts step by step, (1) does per-sample failure
@@ -41,6 +81,10 @@ Training logic and hyperparameters in `main_base.py`, `main_fmfp.py` and
 * `export_cifar10_splits.py` — writes the 45,000 / 5,000 / 10,000 train / validation /
   test split used by `utils/data.py` (NumPy seed 42) to `split_data/` (not committed).
 * `requirements.txt` — Python dependencies (unpinned).
+* `download_release.py` — fetches the inference caches (and, with `--models`, the
+  checkpoints) from the v1.0 release.
+* `check_reproduction.py` — compares a fresh run with the committed results and prints
+  the paper's tables.
 * `FMFP_ORIGINAL_README.md` — the original FMFP README.
 
 ### Datasets

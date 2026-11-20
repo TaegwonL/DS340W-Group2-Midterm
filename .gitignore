@@ -236,3 +236,8 @@ output*/**/*.log
 
 # CIFAR-10 split arrays written by export_cifar10_splits.py
 split_data/
+
+# demo run (download_release.py, quick start in README)
+demo_output/
+checkpoints/
+*.part
