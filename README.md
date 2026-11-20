@@ -68,6 +68,12 @@ python check_reproduction.py
 Table III (pooled AUROC by severity), Table II (label-free trigger) and the Spearman
 correlations of Section IV.C. Everything is written to `demo_output/`, so the
 committed results in `output_shift/` stay untouched for the comparison.
+On Apple Silicon (M1/M2/M3) Macs, accuracy and the MSP scores match exactly, but
+the Risk Advisor scores (`ra_*`, and the `p_err` / `total_risk` / `epistemic` /
+`aleatoric` signals) differ slightly, by up to about 0.1 percentage points of pooled
+AUROC, so `check_reproduction.py` reports `DIFFERENT` even with the pinned versions.
+This most likely comes from floating-point differences between ARM and the x86 CPU
+the paper's results were produced on. None of the comparisons or conclusions change.
 `python download_release.py --models` also fetches the two checkpoints
 (`baseline_model.pth`, `fmfp_model.pth`) to `checkpoints/`; with a GPU and CIFAR-10-C
 they rerun the inference itself (`eval_shift.py --ckpt checkpoints/fmfp_model.pth --tag fmfp`,
