@@ -18,15 +18,40 @@ label-free trigger are recomputed on a CPU in a few minutes and reproduce every
 number in the paper. Needs Python 3.10–3.13 and about 2 GB of disk; keep the pinned
 versions in `requirements.txt` (a newer scikit-learn changes the Risk Advisor numbers).
 
+**1. Setup — Windows (PowerShell / cmd)**
+
 ```
 git clone https://github.com/TaegwonL/DS340W-Group2-Midterm.git
 cd DS340W-Group2-Midterm
 python -m venv .venv
-.venv\Scripts\activate             # macOS / Linux: source .venv/bin/activate
+.venv\Scripts\activate
 pip install torch torchvision
 pip install -r requirements.txt
+```
 
-python download_release.py         # 2 caches (2 x 880 MB) -> demo_output/
+**1. Setup — macOS (zsh, Apple Silicon or Intel)**
+
+```
+git clone https://github.com/TaegwonL/DS340W-Group2-Midterm.git
+cd DS340W-Group2-Midterm
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install torch torchvision
+pip install -r requirements.txt
+```
+
+The `python3` that ships with macOS is 3.9, which is too old. Install 3.12 with
+`brew install python@3.12` (or use any 3.10–3.13 interpreter) and create the venv
+with it. Once `(.venv)` shows in the prompt, `python` and `pip` point to the venv;
+in a new terminal window run `source .venv/bin/activate` again, otherwise zsh
+reports `command not found: python`. Paste the commands without trailing `#`
+comments: interactive zsh does not treat `#` as a comment and fails with errors
+such as `unknown file attribute`.
+
+**2. Download the caches and reproduce (same on every OS, inside the venv)**
+
+```
+python download_release.py
 
 python eval_shift.py --tag baseline --use_cache --out demo_output/results.csv
 python eval_shift.py --tag fmfp --use_cache --out demo_output/results.csv
@@ -35,9 +60,10 @@ python plot_shift.py --csv demo_output/results.csv
 python plot_monitor.py --dir demo_output
 python plot_trigger.py --dir demo_output
 
-python check_reproduction.py       # compares demo_output/ with output_shift/ and prints Tables II and III
+python check_reproduction.py
 ```
 
+`download_release.py` writes the two caches (2 × 880 MB) to `demo_output/`.
 `check_reproduction.py` reports `MATCH` for each results file and prints the paper's
 Table III (pooled AUROC by severity), Table II (label-free trigger) and the Spearman
 correlations of Section IV.C. Everything is written to `demo_output/`, so the
